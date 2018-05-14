@@ -1,6 +1,7 @@
 import sys
 import re
 from tabulate import tabulate
+import random
 
 BOARD_MAX_COL = 10
 BOARD_MAX_ROW = 10
@@ -9,12 +10,17 @@ YELLOW = -1
 
 board_size = (7, 6)
 board_size_input = ''
+two_player = True
 
-if len(sys.argv) > 0:
+if len(sys.argv) == 1:
 	print("What board dimensions would you like? (7, 6)")
 	board_size_input = input()
 else:
-	board_size_input = sys.argv[1]
+	for arg in sys.argv[1:]:
+		if arg == "/cpu":
+			two_player = False
+		else:
+			board_size_input = arg
 
 def parse_input(_input, col_max, row_min):
 	match = re.match('^\(?\s*(\d+)\s*(,|x)\s*(\d+)\s*\)?$', _input)
@@ -23,7 +29,7 @@ def parse_input(_input, col_max, row_min):
 	return None
 
 if board_size_input:
-	board_size = parse_input(board_size_input, BOARD_MAX_COL, BOARD_MAX_ROW)
+	board_size = parse_input(board_size_input, BOARD_MAX_COL, BOARD_MAX_ROW) or board_size # None coalesce
 
 board = [['_' for x in range(board_size[0])] for y in range(board_size[1])]
 
@@ -32,20 +38,35 @@ def print_board(board, board_size):
 		headers=[h for h in range(board_size[0])]))
 	print('\n')
 
-def move(board, board_size, player):
-	output = 'RED' if player==RED else 'YELLOW'
-	col = min(board_size[0] - 1, int(input(output + ' >> ')))
+def board_is_full(board, board_size):
+	for col in range(board_size[0]):
+		if board[0][col] == '_':
+			return False
+	return True
+
+def move_core(board, board_size, player, col):
 	row = 0
-
-	if board[0][col] != '_':
-		return move(board, board_size, player) # ask again
-
 	for i in range(board_size[1]-1, -1, -1):
 		if (board[i][col] == '_'):
 			board[i][col] = 'R' if player==1 else 'Y'
 			row = i
 			break
 	return (player, col, row)
+
+def move(board, board_size, player):
+	output = 'RED' if player==RED else 'YELLOW'
+	col = min(board_size[0] - 1, int(input(output + ' >> ')))
+	if board[0][col] != '_':
+		return move(board, board_size, player) # ask again
+	return move_core(board, board_size, player, col)
+
+def move_cpu(board, board_size, player):
+	output = 'RED' if player==RED else 'YELLOW'
+	col = random.choice(range(board_size[0]))
+	print(output, '>>', col)
+	if board[0][col] != '_':
+		return move_cpu(board, board_size, player) # try again
+	return move_core(board, board_size, player, col)
 
 def check_is_win_direction(board, player_code, col, row, args):
 	success = 0 # don't include starting value
@@ -114,6 +135,9 @@ def start(board, board_size):
 	moves.append(curr_move)
 	print_board(board, board_size)
 	while not is_winning_move(board, board_size, curr_move):
+		if board_is_full(board, board_size):
+			return None
+
 		player *= -1 # Switch player
 		curr_move = move(board, board_size, player)
 		moves.append(curr_move)
@@ -121,9 +145,42 @@ def start(board, board_size):
 
 	return player 
 	
+def start_cpu(board, board_size):
+	moves = []
+	cpu_code = random.choice([RED, YELLOW])
+	human_code = cpu_code * -1
+	print("You are", "RED!" if human_code == RED else "YELLOW!")
+	player = human_code if human_code == RED else cpu_code # Red goes first	 
+	
+	print_board(board, board_size)
+	if player == human_code:
+		curr_move = move(board, board_size, player)
+	else:
+		curr_move = move_cpu(board, board_size, player)
+	moves.append(curr_move)
+	print_board(board, board_size)
+	while not is_winning_move(board, board_size, curr_move):
+		if board_is_full(board, board_size):
+			return None
 
-winner = start(board, board_size)
-if winner == RED:
+		player *= -1 # Switch player
+		if player == human_code:
+			curr_move = move(board, board_size, player)
+		else:
+			curr_move = move_cpu(board, board_size, player)
+		moves.append(curr_move)
+		print_board(board, board_size)
+
+	return player
+
+if two_player:
+	winner = start(board, board_size)
+else:
+	winner = start_cpu(board, board_size)
+
+if winner is None:
+	print("It's a TIE!!")
+elif winner == RED:
 	print("RED Wins!!")
 elif winner == YELLOW:
 	print("YELLOW Wins!!")
